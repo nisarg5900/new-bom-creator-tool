@@ -5,8 +5,8 @@
 closing and would welcome PRs — before investing in the build. This is the
 sanctioned venue for "is this on your radar" (the issue tracker is not).
 
-> Paste the body below. Replace the repo link once the repo is public, and add
-> screenshots/GIFs where noted.
+> Paste the body below and add screenshots/GIFs where noted. Repo (public):
+> https://github.com/nisarg5900/new-bom-creator-tool
 
 ---
 
@@ -48,7 +48,8 @@ duplicate: fetching a sub-assembly's BOM (#42932), reusing/linking existing BOMs
 
 My intended approach keeps everything producing standard `BOM` documents and
 improves the existing BOM Creator (not a parallel tool), so each item can be a
-small, self-contained PR. Full write-up and phased plan here: **<REPO LINK>**.
+small, self-contained PR. Full write-up and phased plan here:
+**https://github.com/nisarg5900/new-bom-creator-tool**.
 
 Questions for the maintainers:
 1. Are any of these already on the roadmap?
