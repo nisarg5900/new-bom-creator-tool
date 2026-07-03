@@ -1,10 +1,18 @@
 # New BOM Creator Tool — Phased Development Plan
 
-Verified against **ERPNext 16.21.1** on bench `~/frappe-bench-v16`.
+Verified against **ERPNext 16.21.1** (v16 bench with ERPNext installed).
 
-This plan builds an independent Frappe app (`new_bom_creator`) that provides a
-**BOM Builder** — an improved wizard that generates and edits standard ERPNext
-`BOM` documents. It does not fork or replace erpnext core.
+This plan builds `new_bom_creator` — a GPL-3.0 app that **improves the existing
+ERPNext BOM Creator** so it can generate and edit standard `BOM` documents
+without the current gaps. Dual-target: shippable standalone **and** shaped so
+each change can be offered upstream as a PR. It does not fork erpnext core.
+
+> **Revision note:** the phase detail below predates two decisions now agreed and
+> is being revised to match them: (a) **improve the existing BOM Creator via
+> override hooks** rather than a parallel `BOM Builder` doctype, and (b) a
+> **two-layer** flow (Layer 1 structure → Layer 2 detail). The architecture and
+> conventions sections already reflect the new direction; individual phases will
+> be restructured next.
 
 ---
 
@@ -14,33 +22,41 @@ This plan builds an independent Frappe app (`new_bom_creator`) that provides a
 ┌─────────────────────────────────────────────────────────────┐
 │  new_bom_creator (this app)   depends on → erpnext           │
 │                                                              │
-│  DocType: BOM Builder (header)                               │
-│  DocType: BOM Builder Item (child, tree via parent_row_no)   │
-│  Page:    bom-builder (custom tree UI)                       │
-│  Server:  generate_boms()  ── creates/edits standard ──►  BOM│
-│  Client:  BOM listview hook adds "Create via BOM Builder"    │
+│  Overrides the existing BOM Creator (no fork), via hooks:    │
+│   • override_doctype_class ........ extend the controller    │
+│   • override_whitelisted_methods .. add_item / add_sub_...   │
+│   • doctype_js / bundle override .. improved tree + dialogs  │
+│   • BOM listview / form hooks ..... missing entry points     │
+│                                                              │
+│  Layer 1 (structure)  →  Layer 2 (detail)  →  standard BOM   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Key principle:** the generator is the only place that writes `BOM`. Every gap
-fix (UOM, draft, default control, reuse, import) is implemented there and in the
-builder UI — never by editing erpnext.
+**Key principle:** every improvement is a small, self-contained change to BOM
+Creator's real behaviour — **one fix = one unit = one potential upstream PR** —
+and the output is always a 100%-standard `BOM`.
 
-**Why a parallel doctype instead of overriding `BOM Creator`?** Overriding core
-DocType controllers and their bundled Vue/tree JS is fragile across erpnext
-minor upgrades. A parallel builder we fully own lets us iterate freely while
-still producing 100%-standard BOMs. If the core tool later gains these features,
-our generator can be retired without data migration (BOMs are already standard).
+**Why improve BOM Creator instead of a parallel doctype?** For upstream-merge
+viability. Maintainers accept improvements to the tool that exists; a second
+competing doctype invites rejection. In standalone mode we express those
+improvements through erpnext's override hooks, so each override maps ~1:1 onto an
+edit of BOM Creator's upstream files and the merge diff stays small.
 
 ---
 
 ## Conventions
 
-- **App module:** `new_bom_creator`  •  **DocType prefix:** `BOM Builder`  •
-  **Custom field prefix (if any core fields needed):** `nbc_`
-- **Test site:** dedicated `bomcreator.localhost` on `~/frappe-bench-v16`
-  (frappe + erpnext + this app only) — one dedicated site per app; never share
-  a site with unrelated apps.
+- **App module:** `new_bom_creator`  •  **License:** GPL-3.0-or-later.
+- **Approach:** override + extend the existing `BOM Creator`; any new fields via
+  fixtures use the `nbc_` prefix and are kept minimal (translation cost at merge
+  = fixtures → native json fields).
+- **Match erpnext conventions** — its ruff/eslint/prettier config, `FrappeTestCase`
+  tests, conventional commits, no new heavy dependencies.
+- **One fix = one unit = one potential PR.** Keep app-only concerns (install,
+  workspace, branding) in a thin layer that's droppable at merge time.
+- **Test site:** a dedicated local site (e.g. `bomcreator.localhost`) with
+  frappe + erpnext + this app only — one dedicated site per app; never shared
+  with unrelated apps.
 - Every phase has a **Definition of Done** and a **Test Gate**. A phase is not
   complete until its automated tests pass on the test site.
 
