@@ -5,8 +5,11 @@
 closing and would welcome PRs — before investing in the build. This is the
 sanctioned venue for "is this on your radar" (the issue tracker is not).
 
-> Paste the body below and add screenshots/GIFs where noted. Repo (public):
+> Paste the body below and add screenshots/GIFs where noted. Repo:
 > https://github.com/nisarg5900/new-bom-creator-tool
+> **Before posting:** flip the repo to public (it is currently private) — the
+> forum post links to it. If you'd rather not, remove the repo URL from the
+> body.
 
 ---
 
@@ -51,13 +54,33 @@ improves the existing BOM Creator (not a parallel tool), so each item can be a
 small, self-contained PR. Full write-up and phased plan here:
 **https://github.com/nisarg5900/new-bom-creator-tool**.
 
-Questions for the maintainers:
+### Questions for the maintainers
+
 1. Are any of these already on the roadmap?
 2. Which would you consider in-scope for PRs to core?
 3. Any you'd prefer to see as a separate app rather than in core?
 
+### Questions for everyone using BOM Creator in production
+
+I want to make sure I'm not building around only my own workflow. Please
+chime in:
+
+- **Which of these hits you the hardest?** Helps me prioritise the PR order.
+- **What am I missing?** Any gap not on this list — bugs, feature requests,
+  edge cases in costing / subcontracting / variants / process loss / print
+  output / batch qty / alternative items / by-products / operations that
+  BOM Creator handles poorly.
+- **UX ideas for the tree view.** Expand-to-level? Colour or icon by depth?
+  A cost overlay per node? Something else?
+- **Two-layer workflow feedback.** I'm proposing *Structure* first (tree +
+  qty/UOM + sub-assembly reuse), *Detail* second (operations, warehouses,
+  alternates, by-products, active/default) — over the same tree, not a modal
+  wizard. Does that match how you actually build BOMs?
+- **Anything you've already worked around locally** with client scripts /
+  custom apps — I'd rather learn from your patches than reinvent them.
+
 Happy to start with the smallest, lowest-risk ones (the UOM fix and the
 dead-field cleanup). Thanks!
 
-*(Attach: a screenshot of the current tree view for a 3–4 level BOM, and a quick
-mockup of the level-grouped version.)*
+*(Attaching a screenshot of a real 3-level BOM tree to illustrate the
+legibility point.)*

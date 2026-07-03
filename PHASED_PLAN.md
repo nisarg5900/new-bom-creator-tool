@@ -1,305 +1,400 @@
 # New BOM Creator Tool — Phased Development Plan
 
-Verified against **ERPNext 16.21.1** (v16 bench with ERPNext installed).
-
-This plan builds `new_bom_creator` — a GPL-3.0 app that **improves the existing
-ERPNext BOM Creator** so it can generate and edit standard `BOM` documents
-without the current gaps. Dual-target: shippable standalone **and** shaped so
-each change can be offered upstream as a PR. It does not fork erpnext core.
-
-> **Revision note:** the phase detail below predates two decisions now agreed and
-> is being revised to match them: (a) **improve the existing BOM Creator via
-> override hooks** rather than a parallel `BOM Builder` doctype, and (b) a
-> **two-layer** flow (Layer 1 structure → Layer 2 detail). The architecture and
-> conventions sections already reflect the new direction; individual phases will
-> be restructured next.
+Verified against **ERPNext 16.21.1**.
 
 ---
 
-## Architecture at a glance
+## North star: dual delivery targets
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  new_bom_creator (this app)   depends on → erpnext           │
-│                                                              │
-│  Overrides the existing BOM Creator (no fork), via hooks:    │
-│   • override_doctype_class ........ extend the controller    │
-│   • override_whitelisted_methods .. add_item / add_sub_...   │
-│   • doctype_js / bundle override .. improved tree + dialogs  │
-│   • BOM listview / form hooks ..... missing entry points     │
-│                                                              │
-│  Layer 1 (structure)  →  Layer 2 (detail)  →  standard BOM   │
-└─────────────────────────────────────────────────────────────┘
-```
+Every phase produces artifacts that can be **shipped two ways**:
 
-**Key principle:** every improvement is a small, self-contained change to BOM
-Creator's real behaviour — **one fix = one unit = one potential upstream PR** —
-and the output is always a 100%-standard `BOM`.
+1. **Standalone app** — installed on any ERPNext v16 site, overriding the built-in
+   BOM Creator via Frappe's `override_doctype_class`, `override_whitelisted_methods`,
+   and `doctype_js` / bundle-override hooks. No fork.
+2. **Upstream PR against `frappe/erpnext`** — each hooks-override maps ~1:1 onto
+   an edit of the corresponding core file (`bom_creator.py`,
+   `bom_creator.js`, `bom_configurator.bundle.js`, `bom_creator.json`, etc.).
 
-**Why improve BOM Creator instead of a parallel doctype?** For upstream-merge
-viability. Maintainers accept improvements to the tool that exists; a second
-competing doctype invites rejection. In standalone mode we express those
-improvements through erpnext's override hooks, so each override maps ~1:1 onto an
-edit of BOM Creator's upstream files and the merge diff stays small.
+Design discipline that keeps both viable:
+
+- **One fix = one self-contained unit = one potential PR.** Small focused PRs
+  merge; monolithic rewrites get ignored. Even if the whole vision isn't
+  adopted, individual wins land.
+- **License: GPLv3 from the first commit** (ERPNext is GPLv3 — any other
+  licence is unmergeable).
+- **ERPNext conventions**: their ruff/eslint/prettier config, `FrappeTestCase`
+  tests, conventional-ish commit style, no new heavy dependencies.
+- **Quarantine app-only concerns** (install hooks, workspace card, any
+  branding) in a thin `app_shell/` layer that is obviously droppable at merge
+  time.
+- **Engage maintainers before heavy building.** Forum post →
+  gauge appetite → file per-fix issues with a "willing to PR" offer → build.
+
+---
+
+## Design decision: improve the existing BOM Creator (do not build a parallel doctype)
+
+For upstream-merge, the single most important rule is: **maintainers accept
+improvements to the thing that already exists; they reject a second competing
+tool.** So instead of a new `BOM Builder` doctype:
+
+- Extend `BOM Creator` / `BOM Creator Item` with the small number of new fields
+  we need (output mode, per-FG default-control, etc.).
+- Override the four methods that hold all the bugs — `add_item`,
+  `add_sub_assembly`, `create_bom`, `create_boms` — and the tree/dialog JS.
+- Everything we generate remains a **standard `BOM` document** (no changes to
+  BOM doctype itself).
+
+New fields added by the app follow ERPNext naming (no `nbc_` prefix in the
+merge-ready version). The standalone app keeps them non-invasive via
+`custom_fields` fixtures so they roll back cleanly on uninstall.
+
+---
+
+## Two-layer workflow (product design)
+
+Same building surface, two conceptual passes users can iterate on independently:
+
+- **Layer 1 — Structure.** Map the skeleton: FG + qty + UOM; the component
+  tree; which nodes are sub-assemblies vs raw materials; per-line qty & UOM
+  (with correct conversion); reuse an existing sub-assembly's default BOM.
+  Output = a validated draft structure.
+- **Layer 2 — Detail.** Decorate each node: operations/routing (workstation,
+  time, cost), by-products / secondary items, scrap / process loss, QC,
+  source/target warehouses, alternative items, per-BOM active/default control.
+  Output = submit → standard BOM(s).
+
+The layers are not hard-gated modal steps — they're two toolbars / side-panels
+over the same tree. Users can dip into detail mid-structure and back again.
+
+**Positioning against direct BOM creation:** primary path, not exclusive. The
+standard BOM form remains available for trivial BOMs, quick one-field edits,
+and platform/API flows (Work Orders, subcontracting, MRP, Data Import all
+create BOMs directly and must keep working). Entry points from the BOM list /
+new-BOM form (Phase 6) make the tool the natural default without blocking the
+form.
 
 ---
 
 ## Conventions
 
-- **App module:** `new_bom_creator`  •  **License:** GPL-3.0-or-later.
-- **Approach:** override + extend the existing `BOM Creator`; any new fields via
-  fixtures use the `nbc_` prefix and are kept minimal (translation cost at merge
-  = fixtures → native json fields).
-- **Match erpnext conventions** — its ruff/eslint/prettier config, `FrappeTestCase`
-  tests, conventional commits, no new heavy dependencies.
-- **One fix = one unit = one potential PR.** Keep app-only concerns (install,
-  workspace, branding) in a thin layer that's droppable at merge time.
-- **Test site:** a dedicated local site (e.g. `bomcreator.localhost`) with
-  frappe + erpnext + this app only — one dedicated site per app; never shared
-  with unrelated apps.
-- Every phase has a **Definition of Done** and a **Test Gate**. A phase is not
-  complete until its automated tests pass on the test site.
+- **App module (standalone):** `new_bom_creator`.
+- **Doctype changes:** to `BOM Creator` / `BOM Creator Item` (no parallel doctype).
+- **Custom fields (standalone):** shipped via `custom_field` fixtures with the
+  same names as the merge-ready version — swap-out at merge time = remove the
+  fixture, add the field to the core JSON.
+- **Test site:** dedicated `bomcreator.localhost` — one dedicated site per app;
+  never shared with unrelated apps.
+- **Definition of Done + Test Gate** required per phase.
 
 ---
 
-## Phase 0 — Scaffold, test site & CI
+## Phase 0 — Scaffold, test site, override plumbing
 
-**Goal:** installable app, isolated test site, green smoke test.
-
-Tasks:
-- `bench new-app new_bom_creator` (module `new_bom_creator`).
-- Declare erpnext dependency in `hooks.py` (`required_apps = ["erpnext"]`).
-- Create dedicated site:
-  `bench new-site bomcreator.localhost --admin-password admin --mariadb-root-password admin </dev/null`
-  then `bench --site bomcreator.localhost install-app erpnext new_bom_creator </dev/null`.
-- `.pre-commit-config.yaml` (ruff + prettier, mirroring frappe/erpnext).
-- Optional GitHub Actions: spin bench + erpnext, run `bench run-tests --app new_bom_creator`.
-
-**Definition of Done:** app installs on a fresh site with erpnext present; site
-migrates cleanly.
-
-**Test Gate (smoke):**
-- `test_app_installs` — module importable, hooks load.
-- `bench --site bomcreator.localhost migrate` exits 0.
-
----
-
-## Phase 1 — Data model + standard-BOM generation (parity baseline)
-
-**Goal:** reproduce core BOM Creator's output for simple & multi-level trees,
-through our own generator, with the known core bugs pre-covered by tests.
+**Goal:** installable GPLv3 app that already knows how to override the four
+methods and the JS bundle without changing behaviour yet (identity overrides).
 
 Tasks:
-- DocType **BOM Builder** (header: item, qty, uom, company, currency,
-  rm_cost_as_per, buying_price_list, project, status, output_mode placeholder).
-- DocType **BOM Builder Item** (child: item_code, fg_item, qty, uom, stock_qty,
-  conversion_factor, stock_uom, rate, amount, operation, is_expandable,
-  parent_row_no, fg_reference_id, is_phantom_item — mirror of `BOM Creator Item`
-  plus room for later fields).
-- `generate_boms()` — port core's reverse-tree walk (`create_boms`/`create_bom`)
-  that builds one `BOM` per expandable node, links child `bom_no`s, and submits.
+- `bench new-app new_bom_creator` (GPLv3 in `license.txt`).
+- `hooks.py`: `required_apps = ["erpnext"]`;
+  `override_whitelisted_methods` for `add_item`, `add_sub_assembly`; class
+  override for `BOMCreator` via `override_doctype_class`; JS override for
+  `bom_creator.js` and the `bom_configurator` bundle via `app_include_js`.
+- Identity wrappers (call `super()` / re-export the core function) so nothing
+  breaks yet — verifies hook plumbing is correct.
+- Dedicated test site `bomcreator.localhost` (frappe + erpnext + this app only).
+- CI (GitHub Actions) that installs frappe + erpnext + this app on a throwaway
+  site and runs `bench run-tests --app new_bom_creator`.
 
-**Definition of Done:** a builder tree produces the same BOM set a hand-build
-would, for 1-level and N-level cases.
-
-**Test Gate (integration):**
-- `test_single_level_generates_one_bom`.
-- `test_multi_level_links_child_boms` — parent BOM line `bom_no` points at child.
-- `test_reused_subassembly_no_keyerror` — regression for core
-  [#49746](https://github.com/frappe/erpnext/issues/49746) (same sub-assembly
-  under two branches).
-- `test_duplicate_item_guard` — regression for [#48006](https://github.com/frappe/erpnext/issues/48006).
-
----
-
-## Phase 2 — UOM & conversion factor (headline gap #1)
-
-**Goal:** per-line UOM independent of stock UOM, with correct conversion.
-
-Tasks:
-- Make line `uom` editable; on change call
-  `erpnext.stock.get_item_details.get_conversion_factor(item_code, uom)` and set
-  `conversion_factor`, then recompute `stock_qty = qty * conversion_factor`.
-- Sub-assembly / raw-material entry dialog gains a **UOM** column (core omits it).
-- Generator carries `uom` + `conversion_factor` + `stock_qty` onto the BOM line
-  (standard BOM already honours these via `get_bom_material_detail`).
-- Guard: UOM must exist in the item's UOM Conversion table, else clear error.
-
-**Definition of Done:** entering "2.5 g" of a kg-stock polymer yields
-`conversion_factor = 0.001`, `stock_qty = 0.0025 kg`, and the generated BOM line
-matches.
+**Definition of Done:** app installs on a fresh site; migrations clean; core
+BOM Creator behaviour unchanged.
 
 **Test Gate:**
-- `test_gram_of_kg_item_conversion` — factor & stock_qty correct.
+- `test_app_installs` — module importable, hooks load.
+- `test_identity_override_no_behavioural_change` — core `create_bom` still
+  produces the same `BOM` as vanilla erpnext for a fixture tree.
+
+---
+
+## Phase 1 — Bug fixes: dead fields *(smallest possible PR; relationship-builder)*
+
+**Goal:** ship the trivial, high-signal cleanup as our first upstream PR to
+establish a review relationship before we ask for larger changes.
+
+Scope (maps to `docs/UPSTREAM_ISSUES.md` → BUG 1):
+- Remove or wire up `bom_creator.js`'s `set_value(cdt, cdn, "bom_no", …)` call
+  (that field doesn't exist on `BOM Creator Item`).
+- Remove or wire up header `default_warehouse` (currently never read by
+  `create_bom` / `create_boms`).
+
+**Definition of Done:** unused code paths gone or functional; nothing regresses.
+
+**Test Gate:**
+- `test_do_not_explode_toggle_no_error` — regression harness for the dead
+  set_value.
+- `test_default_warehouse_either_propagates_or_absent` — pins whichever
+  decision is taken.
+
+**Upstream PR:** small, isolated, easy to review — ideal first contact.
+
+---
+
+## Phase 2 — UOM & conversion factor *(no schema change; smallest feature PR)*
+
+**Goal:** the headline pain point. Line UOM independent of stock UOM, with
+correct conversion factor. `uom` / `conversion_factor` / `stock_qty` fields
+already exist on `BOM Creator Item`, so **no doctype change**.
+
+Scope (→ FEAT 1):
+- Override `add_item()` / `add_sub_assembly()` to stop hardcoding
+  `uom = stock_uom` and `conversion_factor = 1`.
+- On UOM change (client), call
+  `erpnext.stock.get_item_details.get_conversion_factor(item_code, uom)` and
+  recompute `stock_qty`.
+- Add a **UOM column** to the sub-assembly dialog's Raw Materials grid.
+- Friendly error when the chosen UOM isn't in the item's UOM Conversion table.
+- Generator carries `uom` / `conversion_factor` / `stock_qty` onto the BOM
+  line (standard BOM already honours these).
+
+**Definition of Done:** entering "2.5 g" of a Kg-stock polymer yields
+`conversion_factor = 0.001`, `stock_qty = 0.0025 Kg`, and the generated BOM
+line matches.
+
+**Test Gate:**
+- `test_gram_of_kg_item_conversion` — factor + stock_qty correct.
 - `test_generated_bom_line_carries_uom` — BOM line uom/cf/stock_qty correct.
 - `test_costing_uses_stock_qty` — RM cost = valuation × stock_qty (not qty).
 - `test_uom_not_in_conversion_table_errors` — friendly failure.
 
+**Upstream PR:** clean, no schema change, tightly scoped — good second PR.
+
 ---
 
-## Phase 3 — Draft output + default/active control (gaps #2, #3)
+## Phase 3 — Draft output + is_default / is_active control
 
-**Goal:** stop forcing submit-and-default; make the destructive action explicit.
+**Goal:** stop forcing submit-and-default; make destructive actions explicit.
 
-Tasks:
-- Header **Output Mode**: `Draft` (docstatus 0) vs `Submit` (docstatus 1).
-- Per-FG **Set as Default** (default off when a default already exists) and
-  **Is Active** controls; pass through to generated BOM (core hardcodes neither
-  reachable).
-- **Supersede preview**: before generating, show a dry-run summary —
-  "N BOMs will be created; these items already have a default that will be
-  replaced: …" — and require confirmation.
+Scope (→ FEAT 2):
+- Add `output_mode` (Draft / Submit) to `BOM Creator`.
+- Add per-FG `set_as_default` and `is_active` (defaults respect existing
+  defaults; `set_as_default` defaults *off* when a default BOM already exists
+  for that item).
+- **Supersede preview** before generation: "N BOMs will be created; these
+  items already have a default that will be replaced: …", requiring
+  confirmation.
+- Override `create_bom` to honour these.
 
-**Definition of Done:** user can produce draft BOMs, and can create a BOM
-without disturbing an item's existing default.
+**Definition of Done:** user can produce draft BOMs and can create a BOM
+without disturbing an existing default.
 
 **Test Gate:**
 - `test_draft_mode_leaves_docstatus_zero`.
-- `test_non_default_preserves_existing_default` — prior default untouched.
+- `test_non_default_preserves_existing_default`.
 - `test_supersede_preview_lists_affected_items`.
+
+**Upstream PR:** adds fields — the biggest schema change, but small in
+scope; still isolated.
 
 ---
 
-## Phase 4 — Sub-assembly reuse & import (gaps #4, #5, #6)
+## Phase 4 — Import an existing BOM into BOM Creator for editing
 
-**Goal:** stop retyping recipes that already exist; enable round-trip editing.
+**Goal:** stop the tool from being one-directional.
 
-Tasks:
-- **Fetch RM from default BOM** when adding a sub-assembly whose item has a
-  submitted default BOM — pre-fill the raw-material grid
-  (addresses [#42932](https://github.com/frappe/erpnext/issues/42932)).
-- **Link existing BOM** as an explodable node without recreating children
-  (addresses [#38438](https://github.com/frappe/erpnext/issues/38438)).
-- **Import existing BOM tree** into a new BOM Builder for editing. Reconstruct
-  the builder tree from a submitted BOM + its child `bom_no`s. On regenerate,
-  route through erpnext's cancel-and-amend versioning (the same mechanism
-  `manage_default_bom` relies on) — **never** blind-duplicate a new BOM number
-  (relevant to [#38395](https://github.com/frappe/erpnext/issues/38395)).
+Scope (→ FEAT 3):
+- Server helper that reconstructs a `BOM Creator` tree from a submitted `BOM`
+  and its child `bom_no`s.
+- Client action **"Import from BOM"** on new `BOM Creator` forms.
+- On regenerate: route through ERPNext's existing cancel-and-amend versioning
+  (the mechanism `manage_default_bom` relies on) — never blind-duplicate a BOM
+  number.
 
-**Definition of Done:** adding an existing sub-assembly auto-loads its RM; an
-existing multi-level BOM can be imported, edited, and regenerated as a proper
-new version.
+**Definition of Done:** a submitted multi-level BOM can be imported, edited,
+and regenerated as a proper new version.
+
+**Test Gate:**
+- `test_import_bom_reconstructs_tree` — round-trip preserves qty / uom / hierarchy.
+- `test_regenerate_creates_new_version_not_orphan_default`.
+- `test_import_of_bom_with_reused_subassembly` — regression for
+  [#49746](https://github.com/frappe/erpnext/issues/49746) shape.
+
+**Upstream PR:** larger; may need pre-review discussion on the versioning path.
+
+---
+
+## Phase 5 — Sub-assembly reuse *(coordinates with upstream #42932 / #38438)*
+
+**Goal:** stop retyping recipes that already exist.
+
+Scope:
+- **Fetch RM from default BOM** when a sub-assembly item has one — pre-fills
+  the Raw Materials grid in the Add Sub Assembly dialog. Coordinates with
+  [#42932](https://github.com/frappe/erpnext/issues/42932).
+- **Link existing BOM as an explodable node** — skip recreation of its
+  children in `create_boms`. Coordinates with
+  [#38438](https://github.com/frappe/erpnext/issues/38438).
+
+**Definition of Done:** adding an existing sub-assembly auto-loads its RM; a
+linked BOM does not get duplicated on generation.
 
 **Test Gate:**
 - `test_add_subassembly_prefills_from_default_bom`.
 - `test_link_existing_bom_as_node_skips_recreation`.
-- `test_import_bom_reconstructs_tree`.
-- `test_regenerate_creates_new_version_not_orphan_default`.
+
+**Upstream PR:** contribute directly to the tickets that already exist rather
+than filing new ones. Comment on those issues linking our PR.
 
 ---
 
-## Phase 5 — Tree UX & level-based view (gap #8)
+## Phase 6 — Navigation entry points
 
-**Goal:** a legible tree; core reuses the generic account-tree widget with no
-BOM-specific affordances.
+**Goal:** discoverable from where users already are, without editing erpnext.
 
-Tasks:
-- Custom tree page with: auto-computed **level numbers** (depth from root),
-  level badges, indent/colour by level, collapse/expand **by depth**, and a
-  per-node qty + UOM + level label.
-- "Expand to level N" control derived from sub-assembly depth.
+Scope (→ FEAT 4):
+- Non-invasive `BOM` listview hook (app public JS) → "Create via BOM Creator".
+- New/blank `BOM` form → "Switch to BOM Creator" action.
+- Optional workspace shortcut card under Manufacturing.
 
-**Definition of Done:** a 4-level tree is visually scannable and collapsible by
-level.
-
-**Test Gate:**
-- `test_level_computation` — depth assigned correctly for N-level tree
-  (pure-function unit test).
-- Manual visual UAT checklist (screenshots in `docs/`).
-
----
-
-## Phase 6 — Navigation & entry points (gap #7)
-
-**Goal:** discoverable from where users already are.
-
-Tasks:
-- Non-invasive `BOM` listview hook (app public JS) adding **"Create via BOM
-  Builder"**.
-- From a new/blank `BOM` form, a **"Switch to Builder"** action.
-- Workspace shortcut + a Manufacturing workspace card.
-
-**Definition of Done:** builder reachable from BOM list, new BOM form, and
-workspace without editing erpnext source.
+**Definition of Done:** BOM Creator reachable from BOM list, new-BOM form, and
+workspace, all without touching erpnext source.
 
 **Test Gate:**
 - `test_bom_listview_hook_registered`.
-- Manual navigation UAT checklist.
+- Manual navigation UAT checklist (screenshots in `docs/`).
+
+**Upstream PR:** trivial JS additions — very small PR.
 
 ---
 
-## Phase 7 — Costing parity & optional advanced fields
+## Phase 7 — Tree view legibility (Layer 1 UX polish)
 
-**Goal:** costing matches core BOM for equivalent input; expose high-value
-fields the core wizard drops.
+**Goal:** a legible tree that survives real-world multi-level BOMs.
 
-Tasks:
-- Verify `raw_material_cost`, `rm_cost_as_per`, price-list & valuation paths
-  equal a hand-built BOM (regression against core cost bugs).
-- Optionally surface: per-line `source_warehouse`, header
-  `default_source/target_warehouse` (and remove the dead `default_warehouse`
-  concept), `inspection_required`/`quality_inspection_template`, per-line
-  `include_item_in_manufacturing` / `allow_alternative_item` overrides.
+Confirmed pain from a real 3-level test BOM: parent / child boundaries become
+ambiguous when many items share indentation levels, folder-vs-leaf iconography
+carries all the semantic weight, and there is no way to focus on a single
+depth.
 
-**Definition of Done:** cost of a generated BOM equals cost of the equivalent
-hand-built BOM within precision.
+Scope (→ UX 1):
+- Auto-computed **level numbers** per node (depth from FG root).
+- Level badges + subtle indent/colour distinction per level.
+- **Expand / collapse by depth** ("Expand to level N"), N derived from
+  the tree's max depth.
+- Per-node display: qty + UOM + level chip.
+
+**Definition of Done:** the same 3-level test BOM is visually scannable and
+collapsible by level.
 
 **Test Gate:**
-- `test_costing_parity_with_manual_bom`.
-- `test_parent_qty_cost_scaling` — regression for [#41617](https://github.com/frappe/erpnext/issues/41617).
-- `test_subassembly_cost_rollup` — regression for [#52149](https://github.com/frappe/erpnext/issues/52149).
-- `test_precision` — regression for [#37953](https://github.com/frappe/erpnext/issues/37953).
+- `test_level_computation` — depth assigned correctly for N-level tree (pure
+  function unit test).
+- Manual visual UAT — screenshots in `docs/` (before/after).
+
+**Note:** the standard `BOM` doctype has its **own** read-only tree view
+(distinct from BOM Creator's build-time tree). The same level-badge treatment
+would help there too, but ship it as a separate follow-up PR against the BOM
+tree page — do not bundle.
 
 ---
 
-## Phase 8 — Packaging, docs & release
+## Phase 8 — Layer 2: operations, warehouses, alternates, by-products
+*(optional / advanced; ship as its own PR family after Phase 6)*
 
-**Goal:** shippable v0.1.
+**Goal:** decorate nodes with the details currently unreachable through the
+wizard. Coordinates with existing upstream tickets.
 
-Tasks:
-- README screenshots, user guide, versioned release notes.
-- Test fixtures documented; full regression suite green.
-- Manual UAT sign-off checklist across all phases.
-- Frappe Cloud bench group / deployment — **deferred; requires explicit
-  confirmation** (per workspace rules, must never interfere with the live site).
+Scope, prioritised:
+1. **Operations table** per FG (workstation, time, cost) — currently BOM
+   Creator has only a single `operation` link per row. Coordinates with
+   [#44094](https://github.com/frappe/erpnext/issues/44094),
+   [#40529](https://github.com/frappe/erpnext/issues/40529),
+   [#48154](https://github.com/frappe/erpnext/issues/48154).
+2. **Per-line `source_warehouse`** and header
+   `default_source_warehouse` / `default_target_warehouse` (fold in the
+   `default_warehouse` dead-field decision from Phase 1).
+3. **Per-line `include_item_in_manufacturing` / `allow_alternative_item`**
+   overrides (both currently hardcoded to `1`).
+4. **`inspection_required` / `quality_inspection_template`**.
+5. **`backflush_based_on`**.
+6. **Secondary items / by-products** and **process loss** — larger scope;
+   requires a UI section per FG.
 
-**Definition of Done:** clean install → full workflow demoable on
-`bomcreator.localhost`; all automated tests green; UAT checklist signed.
+**Definition of Done (per sub-scope):** the field surfaces in Layer 2 and
+carries through to the generated BOM identically to a manual BOM entry.
+
+**Test Gate:** per-field integration tests + `test_costing_parity_with_manual_bom`.
+
+**Upstream PRs:** one per sub-scope, filed in the order above (smaller and
+less contentious first).
+
+---
+
+## Phase 9 — Packaging, docs, release
+
+- README screenshots (before/after tree, UOM entry, supersede preview).
+- User guide + versioned release notes.
+- Full regression suite green on CI.
+- UAT sign-off checklist.
+- Frappe Cloud deployment — **deferred; requires explicit confirmation.**
 
 ---
 
 ## Testing strategy (cross-cutting)
 
-**Framework:** Frappe's `FrappeTestCase` (unit + integration), run via
+**Framework:** `FrappeTestCase`, run via
 `bench --site bomcreator.localhost run-tests --app new_bom_creator`.
 
 **Layers:**
-1. **Unit** — pure functions (conversion-factor math, level computation,
-   supersede-diff) with no DB.
-2. **Integration** — build a BOM Builder tree, call `generate_boms()`, assert on
-   the resulting `BOM`/`BOM Item` rows.
-3. **Regression-as-tests** — each known core BOM Creator bug is encoded as a
-   passing test so our generator can't reintroduce it: #49746 (reuse KeyError),
-   #48006 (duplicate items), #41617 (parent-qty cost), #52149 (sub-assembly
-   cost), #37953 (precision), #43948/#48538 (parent_row_no integrity).
-4. **Manual UAT** — per-phase checklists for the tree UI and navigation, with
-   screenshots committed under `docs/`.
+1. **Unit** — pure functions (conversion math, level computation, supersede
+   diff), no DB.
+2. **Integration** — build tree, call `create_boms`, assert on the resulting
+   `BOM` / `BOM Item` rows.
+3. **Regression-as-tests** — every known core bug encoded as a passing test so
+   our overrides cannot reintroduce it: #49746 (reuse KeyError), #48006/#48007/
+   #38532 (duplicate/multi-branch), #41617 (parent-qty cost), #52149
+   (sub-assembly cost), #37953 (precision), #43948/#48538 (parent_row_no
+   integrity).
+4. **Costing parity** — `test_costing_parity_with_manual_bom` — cost of a
+   generated BOM equals cost of an equivalent hand-built BOM within precision.
+5. **Manual UAT** — per-phase checklists with screenshots in `docs/`.
 
-**Fixtures (test data):**
+**Fixtures:**
 - Item `Polycarbonate` — stock UOM `Kg`, UOM conversion `Gram` (factor 1000).
 - Item `Moulded Part A` — has a default BOM (for reuse/import tests).
-- Item `Assembly A` — multi-level parent.
-- A UOM `Gram` and its conversion detail on the polymer item.
+- Item `Assembly A` — multi-level parent (3 levels).
+- A UOM `Gram` + its conversion detail on the polymer item.
 
-**CI (optional but recommended):** GitHub Actions matrix on push/PR — install
-frappe + erpnext + this app on a throwaway site, run the full suite. Keeps the
-regression net honest as erpnext minor versions move.
+**CI:** GitHub Actions matrix on push/PR — install frappe + erpnext + this
+app on a throwaway site, run the full suite. Keeps the regression net honest
+as erpnext minor versions move.
 
 ---
 
-## Out of scope (for now)
+## Merge-mode ↔ standalone-mode mapping
 
-- Operations/routing costing surface — already tracked upstream
-  (#44094 / #40529 / #48154); revisit after Phase 7 if still needed.
-- Subcontracting BOM entry ([#38520](https://github.com/frappe/erpnext/issues/38520)).
+For each phase's changes, the app tree records the mapping so upstream
+translation is mechanical:
+
+```
+new_bom_creator/
+├── overrides/            # standalone hooks
+│   ├── bom_creator.py    # override class
+│   ├── bom_creator.js    # override client script
+│   └── bom_configurator_bundle.js
+├── fixtures/
+│   └── custom_field.json # standalone-only, dropped at merge time
+├── app_shell/            # workspace, install hooks — dropped at merge time
+└── merge_map.md          # per-file diff summary for each PR
+```
+
+`merge_map.md` is maintained as we go; a phase is not complete until its
+`merge_map` entry is written.
+
+---
+
+## Out of scope
+
 - Frappe Cloud deployment — deferred pending explicit confirmation.
+- Subcontracting BOM entry
+  ([#38520](https://github.com/frappe/erpnext/issues/38520)) — track upstream.
+- Alternative-item substitution UX beyond the per-line toggle in Phase 8.
