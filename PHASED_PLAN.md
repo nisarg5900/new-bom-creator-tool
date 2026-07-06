@@ -4,31 +4,42 @@ Verified against **ERPNext 16.21.1**.
 
 ---
 
-## North star: dual delivery targets
+## North star: dual delivery targets — fork-first, standalone mirrors
 
-Every phase produces artifacts that can be **shipped two ways**:
+Confirmed engagement mechanism (from a Frappe core-team moderator on the forum
+thread): community PRs are not being accepted directly at the moment, but a
+maintainer will "try to create a PR from your fork branch." So the workflow is
+**fork-first, standalone mirror**:
 
-1. **Standalone app** — installed on any ERPNext v16 site, overriding the built-in
-   BOM Creator via Frappe's `override_doctype_class`, `override_whitelisted_methods`,
-   and `doctype_js` / bundle-override hooks. No fork.
-2. **Upstream PR against `frappe/erpnext`** — each hooks-override maps ~1:1 onto
-   an edit of the corresponding core file (`bom_creator.py`,
-   `bom_creator.js`, `bom_configurator.bundle.js`, `bom_creator.json`, etc.).
+1. **Primary development target — a fork of `frappe/erpnext`** under
+   `nisarg5900`. Each phase = one focused branch on the fork, targeting
+   ERPNext's v16 branch. Substantive changes (Python, JS, doctype JSON) live
+   here first; ERPNext's own test suite validates them.
+2. **Standalone GPLv3 app (this repo)** — mirrors each fork-branch change as
+   hooks (`override_doctype_class`, `override_whitelisted_methods`,
+   `doctype_js` / bundle-override, `custom_field` fixtures). Ships to any
+   ERPNext v16 site without waiting on upstream. If the maintainer never PRs
+   a given change, the standalone app is still the delivery vehicle.
+
+Per phase, the workflow is: **build on the fork branch → verify against
+ERPNext test suite → mirror as hooks in this repo → push both → point the
+maintainer at the fork branch when the phase is done.**
 
 Design discipline that keeps both viable:
 
-- **One fix = one self-contained unit = one potential PR.** Small focused PRs
-  merge; monolithic rewrites get ignored. Even if the whole vision isn't
-  adopted, individual wins land.
+- **One fix = one self-contained unit = one focused fork branch = one hooks
+  mirror.** Small focused changes merge; monolithic rewrites get ignored.
+  Even if the whole vision isn't adopted, individual wins land.
 - **License: GPLv3 from the first commit** (ERPNext is GPLv3 — any other
   licence is unmergeable).
 - **ERPNext conventions**: their ruff/eslint/prettier config, `FrappeTestCase`
   tests, conventional-ish commit style, no new heavy dependencies.
 - **Quarantine app-only concerns** (install hooks, workspace card, any
-  branding) in a thin `app_shell/` layer that is obviously droppable at merge
-  time.
-- **Engage maintainers before heavy building.** Forum post →
-  gauge appetite → file per-fix issues with a "willing to PR" offer → build.
+  branding) in a thin `app_shell/` layer in the standalone; nothing app-only
+  ever lands on the fork branches.
+- **Community engagement continues in parallel** — the forum thread stays
+  live for pain-point / feature-request discovery even while development
+  proceeds.
 
 ---
 
@@ -89,12 +100,23 @@ form.
 
 ---
 
-## Phase 0 — Scaffold, test site, override plumbing
+## Phase 0 — Fork, scaffold, test site, override plumbing
 
-**Goal:** installable GPLv3 app that already knows how to override the four
-methods and the JS bundle without changing behaviour yet (identity overrides).
+**Goal:** the fork exists with a working branch template; the standalone
+GPLv3 app is installable and knows how to override the four methods and the
+JS bundle without changing behaviour yet (identity overrides).
 
-Tasks:
+Fork tasks:
+- Fork `frappe/erpnext` to `nisarg5900/erpnext` (one-time).
+- Clone into a working directory outside the bench; add `frappe/erpnext` as
+  the `upstream` remote; keep `main` in sync with upstream.
+- Branch naming: `nbc/<phase>-<slug>` (e.g. `nbc/1-dead-fields`,
+  `nbc/2-uom-conversion`). Base every branch on ERPNext's active v16 branch.
+- Fork-side test loop: run ERPNext's own suite for the touched module
+  (`bench --site … run-tests --app erpnext --module …manufacturing…`) before
+  pointing the maintainer at a branch.
+
+Standalone-app tasks:
 - `bench new-app new_bom_creator` (GPLv3 in `license.txt`).
 - `hooks.py`: `required_apps = ["erpnext"]`;
   `override_whitelisted_methods` for `add_item`, `add_sub_assembly`; class
@@ -106,8 +128,9 @@ Tasks:
 - CI (GitHub Actions) that installs frappe + erpnext + this app on a throwaway
   site and runs `bench run-tests --app new_bom_creator`.
 
-**Definition of Done:** app installs on a fresh site; migrations clean; core
-BOM Creator behaviour unchanged.
+**Definition of Done:** fork exists with `upstream` remote + branch convention;
+standalone app installs on a fresh site; migrations clean; core BOM Creator
+behaviour unchanged.
 
 **Test Gate:**
 - `test_app_installs` — module importable, hooks load.
@@ -318,6 +341,17 @@ Scope, prioritised:
 5. **`backflush_based_on`**.
 6. **Secondary items / by-products** and **process loss** — larger scope;
    requires a UI section per FG.
+7. **Labour Charges as service-item lines.** A quick-add helper in Layer 2
+   that codifies the workaround for piece-rate manufacturing (raised on the
+   forum thread): create or pick a service item
+   (`is_stock_item = 0`, item group **Labour Charges**), add it as a BOM line
+   with qty = 1 and rate = piece-rate. Groups these visually as *Labour* vs
+   *Materials* for scan-ability. **Scope discipline:** labour charges only —
+   this feature does **not** cover overheads, admin costs, or margins.
+   Overheads and margins belong at the Quotation / Sales cycle level, not on
+   the BOM (a BOM should reflect what a unit *costs to make*, not what it
+   *sells for*). Fully mergeable — pure UX shortcut over existing standard
+   BOM behaviour.
 
 **Definition of Done (per sub-scope):** the field surfaces in Layer 2 and
 carries through to the generated BOM identically to a manual BOM entry.

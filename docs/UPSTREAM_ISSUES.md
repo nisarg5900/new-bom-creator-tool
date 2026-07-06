@@ -117,6 +117,39 @@ BOM Creator" action on a blank BOM form; optional workspace card.
 
 ---
 
+## FEAT 5 — Labour Charges quick-add (service-item pattern for piece-rate)
+*(feature_request template)*
+
+**Title:** `BOM Creator: quick-add for Labour Charges as service-item lines (piece-rate friendly)`
+
+**Problem:**
+- BOM Operations are hardcoded to time × hourly-rate; piece-rate manufacturers
+  (raised on the forum thread) have no clean native path to enter labour cost
+  per unit, and end up on unstable workarounds.
+- The working pattern is to add a service item (`is_stock_item = 0`) with
+  `rate = piece rate` as a BOM line; it flows into `raw_material_cost` cleanly
+  and needs no Operations table. But there's no UX affordance for this — users
+  discover it only via forum posts.
+
+**Solution:** a **Labour Charges** quick-add in BOM Creator: pick or create a
+service item in item group `Labour Charges` (`is_stock_item = 0`), add it as a
+BOM line with qty = 1 and rate = piece rate. UI groups these separately from
+raw materials for scan-ability.
+
+**Scope discipline:** labour charges only. Overheads, admin costs, and margins
+belong at the Quotation / Sales cycle, **not** on the BOM — a BOM should
+reflect what a unit costs to make, not what it sells for.
+
+**Version:** 16.21.1. **Module:** manufacturing.
+**Related:** operations-in-BOM-Creator tickets
+[#44094](https://github.com/frappe/erpnext/issues/44094),
+[#40529](https://github.com/frappe/erpnext/issues/40529),
+[#48154](https://github.com/frappe/erpnext/issues/48154) (adjacent — a proper
+`is_piece_rate` on the Operation table would solve the same pain natively;
+this feature complements rather than blocks it). *Willing to submit a PR.*
+
+---
+
 ## UX 1 — tree view legibility & level-based grouping
 *(feature_request template)*
 
@@ -148,4 +181,4 @@ control, per-node qty + UOM + level. *(Attach a mockup.)*
 
 **No existing issue (drafts above):** UOM/conversion, draft-vs-submit,
 forced-default/supersede, import-for-editing, navigation, tree legibility,
-dead fields.
+dead fields, labour-charges quick-add.
