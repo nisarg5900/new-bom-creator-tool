@@ -25,6 +25,25 @@ override_whitelisted_methods = {
 		"new_bom_creator.overrides.bom_creator.add_sub_assembly",
 }
 
+# ---------------------------------------------------------------------------
+# Fixtures — shipped Property Setters / Custom Fields that carry the
+# hooks-side equivalent of the fork-branch doctype edits.
+#
+# Phase 1: hide BOM Creator.default_warehouse. On the fork branch we delete
+# the field entirely; on the standalone we can't remove a field from a core
+# doctype via hooks, so we hide it instead — same user-visible outcome.
+# ---------------------------------------------------------------------------
+fixtures = [
+	{
+		"dt": "Property Setter",
+		"filters": [
+			["doc_type", "=", "BOM Creator"],
+			["field_name", "=", "default_warehouse"],
+			["property", "=", "hidden"],
+		],
+	},
+]
+
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
 # 	{
