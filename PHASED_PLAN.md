@@ -21,9 +21,10 @@ maintainer will "try to create a PR from your fork branch." So the workflow is
    ERPNext v16 site without waiting on upstream. If the maintainer never PRs
    a given change, the standalone app is still the delivery vehicle.
 
-Per phase, the workflow is: **build on the fork branch → verify against
-ERPNext test suite → mirror as hooks in this repo → push both → point the
-maintainer at the fork branch when the phase is done.**
+Per phase, the workflow is: **build on the fork branch → mirror as hooks in
+this repo → verify hooks against vanilla erpnext on the local test site →
+push both.** No maintainer engagement per-phase — we hand over branches only
+once the whole build is complete.
 
 Design discipline that keeps both viable:
 
@@ -37,9 +38,9 @@ Design discipline that keeps both viable:
 - **Quarantine app-only concerns** (install hooks, workspace card, any
   branding) in a thin `app_shell/` layer in the standalone; nothing app-only
   ever lands on the fork branches.
-- **Community engagement continues in parallel** — the forum thread stays
-  live for pain-point / feature-request discovery even while development
-  proceeds.
+- **No community / maintainer engagement until the whole build is done.** The
+  existing forum thread stays as-is; no further posts, no per-phase branch
+  hand-off. When the tool is feature-complete we surface it in one shot.
 
 ---
 
@@ -112,9 +113,10 @@ Fork tasks:
   the `upstream` remote; keep `main` in sync with upstream.
 - Branch naming: `nbc/<phase>-<slug>` (e.g. `nbc/1-dead-fields`,
   `nbc/2-uom-conversion`). Base every branch on ERPNext's active v16 branch.
-- Fork-side test loop: run ERPNext's own suite for the touched module
-  (`bench --site … run-tests --app erpnext --module …manufacturing…`) before
-  pointing the maintainer at a branch.
+- Fork-side test loop: not part of the per-phase cycle. Verification happens
+  against vanilla erpnext on the standalone site (below). A fork↔standalone
+  parity spot-check is done once at the end of the whole build, before
+  handing branches over.
 
 Standalone-app tasks:
 - `bench new-app new_bom_creator` (GPLv3 in `license.txt`).
@@ -158,7 +160,8 @@ Scope (maps to `docs/UPSTREAM_ISSUES.md` → BUG 1):
 - `test_default_warehouse_either_propagates_or_absent` — pins whichever
   decision is taken.
 
-**Upstream PR:** small, isolated, easy to review — ideal first contact.
+**Upstream posture:** branch prepared but not shared yet — first contact
+happens only after the whole build is complete.
 
 ---
 
