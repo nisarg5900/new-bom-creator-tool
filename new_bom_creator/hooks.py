@@ -48,6 +48,24 @@ fixtures = [
 			["property", "=", "hidden"],
 		],
 	},
+	# Phase 3: new fields for draft output + is_default/is_active control.
+	{
+		"dt": "Custom Field",
+		"filters": [
+			["dt", "in", ["BOM Creator", "BOM Creator Item"]],
+			[
+				"fieldname",
+				"in",
+				[
+					"output_mode",
+					"set_as_default",
+					"is_active",
+					"nbc_output_control_section",
+					"nbc_output_column_break",
+				],
+			],
+		],
+	},
 ]
 
 # Each item in the list will be shown as an app in the apps page

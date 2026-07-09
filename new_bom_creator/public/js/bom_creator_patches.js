@@ -106,5 +106,49 @@ frappe.ui.form.on("BOM Creator", {
 			}
 			return fields;
 		};
+
+		// --- Phase 3: supersede-preview dialog ---------------------------------
+		// The core create_multi_level_bom handler calls enqueue_create_boms
+		// directly. Replace it with one that first asks get_supersede_preview
+		// and, if any items' default BOM would be replaced, shows a confirm
+		// dialog listing them.
+		const handlers = frappe.ui.form.handlers["BOM Creator"] || {};
+		handlers["create_multi_level_bom"] = [
+			function (frm) {
+				frm.call({ method: "get_supersede_preview", doc: frm.doc }).then((r) => {
+					const preview = r.message || [];
+					const proceed = () => {
+						frm.call({ method: "enqueue_create_boms", doc: frm.doc });
+					};
+					if (!preview.length) {
+						proceed();
+						return;
+					}
+					const rows = preview
+						.map(
+							(p) =>
+								`<tr>
+									<td>${frappe.utils.escape_html(p.item)}</td>
+									<td>${frappe.utils.escape_html(p.existing_default_bom)}</td>
+								</tr>`
+						)
+						.join("");
+					const body =
+						`<p>${__(
+							"The default BOM for the following items will be replaced by the newly-generated BOMs:"
+						)}</p>` +
+						`<div style="max-height: 240px; overflow-y: auto;">` +
+						`<table class="table table-bordered">` +
+						`<thead><tr><th>${__("Item")}</th><th>${__(
+							"Existing Default BOM"
+						)}</th></tr></thead>` +
+						`<tbody>${rows}</tbody></table></div>` +
+						`<p>${__(
+							"Uncheck 'Set as Default BOM' on those items and rerun if you want to keep the current defaults."
+						)}</p>`;
+					frappe.confirm(body, proceed);
+				});
+			},
+		];
 	},
 });

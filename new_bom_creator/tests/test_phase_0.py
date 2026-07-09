@@ -57,12 +57,13 @@ class TestIdentityOverrideNoBehaviouralChange(FrappeTestCase):
 
 		Phase 0: {}          (identity subclass)
 		Phase 2: add_item, add_sub_assembly (UOM & conversion factor fix)
+		Phase 3: create_bom, get_supersede_preview (draft output + default control)
 		"""
 		self.assertTrue(issubclass(OverrideBOMCreator, CoreBOMCreator))
 		override_public_names = {
 			n for n in vars(OverrideBOMCreator) if not n.startswith("_")
 		}
-		expected = {"add_item", "add_sub_assembly"}
+		expected = {"add_item", "add_sub_assembly", "create_bom", "get_supersede_preview"}
 		self.assertEqual(
 			override_public_names,
 			expected,
