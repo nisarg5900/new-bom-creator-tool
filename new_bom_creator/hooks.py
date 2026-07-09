@@ -25,6 +25,12 @@ override_whitelisted_methods = {
 		"new_bom_creator.overrides.bom_creator.add_sub_assembly",
 }
 
+# Phase 2: patch BOMConfigurator on the client for a per-line UOM column
+# (absent in older erpnext; no-op if upstream has already added it).
+doctype_js = {
+	"BOM Creator": "public/js/bom_creator_patches.js",
+}
+
 # ---------------------------------------------------------------------------
 # Fixtures — shipped Property Setters / Custom Fields that carry the
 # hooks-side equivalent of the fork-branch doctype edits.

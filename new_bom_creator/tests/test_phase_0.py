@@ -52,19 +52,23 @@ class TestIdentityOverrideNoBehaviouralChange(FrappeTestCase):
 	own tests).
 	"""
 
-	def test_override_class_is_a_pure_subclass_of_core(self):
+	def test_override_class_only_defines_expected_public_methods(self):
+		"""Guards against accidental overrides. Update this set each phase.
+
+		Phase 0: {}          (identity subclass)
+		Phase 2: add_item, add_sub_assembly (UOM & conversion factor fix)
+		"""
 		self.assertTrue(issubclass(OverrideBOMCreator, CoreBOMCreator))
-		# No overridden public methods yet. Filter out anything private —
-		# Python (3.14+ adds __firstlineno__ / __static_attributes__) and
-		# Frappe's controller metaclass (_computed_ct_props_updated) inject
-		# machinery that isn't behavioural override.
 		override_public_names = {
 			n for n in vars(OverrideBOMCreator) if not n.startswith("_")
 		}
+		expected = {"add_item", "add_sub_assembly"}
 		self.assertEqual(
 			override_public_names,
-			set(),
-			f"Phase 0 override should not define any public methods yet, found: {override_public_names}",
+			expected,
+			f"Override methods on BOMCreator changed unexpectedly. "
+			f"Expected {expected}, got {override_public_names}. "
+			f"If this is intentional, update the expected set with a note about the phase.",
 		)
 
 	def test_get_controller_returns_override_class(self):
