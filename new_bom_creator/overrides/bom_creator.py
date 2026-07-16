@@ -213,6 +213,75 @@ def _compute_supersede_preview(bom_creator):
 	return preview
 
 
+# --- Phase 4B: import an existing BOM back into BOM Creator ---------------
+
+
+def _apply_import_from_bom(bom_name):
+	"""Shared import logic — reconstruct a BOM Creator from a submitted BOM.
+
+	Returns the name of the new BOM Creator (Draft). Callers may want to
+	wrap this in a whitelisted method — see the module-level and subclass
+	entry points below.
+	"""
+	root_bom = frappe.get_doc("BOM", bom_name)
+
+	bc = frappe.new_doc("BOM Creator")
+	bc.name = f"IMPORT-{root_bom.item}-{frappe.generate_hash(length=6)}"
+	bc.item_code = root_bom.item
+	bc.qty = root_bom.quantity or 1
+	bc.company = root_bom.company
+	bc.currency = root_bom.currency
+	bc.conversion_rate = root_bom.conversion_rate or 1
+	bc.rm_cost_as_per = root_bom.rm_cost_as_per or "Valuation Rate"
+	bc.buying_price_list = root_bom.buying_price_list
+	bc.project = root_bom.project
+	bc.imported_from_bom = bom_name
+	# Imports default to Draft output so the user can review before
+	# regenerating (Phase 3 field).
+	if hasattr(bc, "output_mode"):
+		bc.output_mode = "Draft"
+
+	_import_walk_bom(bc, root_bom, parent_row_no=None, visited={root_bom.name})
+
+	bc.insert(ignore_permissions=True)
+	return bc.name
+
+
+def _import_walk_bom(bc, bom, parent_row_no, visited):
+	"""Depth-first walk. `parent_row_no` = 1-based idx of the sub-assembly
+	row this branch belongs under (None for direct children of the root
+	FG). We predict idx from list position — Frappe assigns idx by
+	position at save time.
+	"""
+	for item in bom.items:
+		row_data = {
+			"item_code": item.item_code,
+			"qty": item.qty,
+			"uom": item.uom,
+			"stock_uom": item.stock_uom,
+			"conversion_factor": item.conversion_factor or 1,
+			"stock_qty": item.stock_qty or (flt(item.qty) * flt(item.conversion_factor or 1)),
+			"rate": item.rate,
+			"operation": item.operation,
+			"fg_item": bom.item,
+			"do_not_explode": 1,
+			"is_phantom_item": cint(item.get("is_phantom_item")),
+		}
+		if parent_row_no is not None:
+			row_data["parent_row_no"] = str(parent_row_no)
+		bc.append("items", row_data)
+		new_idx = len(bc.items)
+
+		if item.bom_no:
+			if item.bom_no in visited:
+				frappe.throw(
+					_("Cycle detected while importing BOM tree at {0}").format(item.bom_no),
+					title=_("Cyclic BOM Reference"),
+				)
+			child_bom = frappe.get_doc("BOM", item.bom_no)
+			_import_walk_bom(bc, child_bom, parent_row_no=new_idx, visited=visited | {item.bom_no})
+
+
 class BOMCreator(_CoreBOMCreator):
 	"""Subclass override — fires on erpnext 16.26.2+ where the frontend
 	calls `add_item` / `add_sub_assembly` as instance methods on the doc.
@@ -231,6 +300,12 @@ class BOMCreator(_CoreBOMCreator):
 	@frappe.whitelist()
 	def get_supersede_preview(self):
 		return _compute_supersede_preview(self)
+
+	@frappe.whitelist()
+	def import_from_bom(self, bom_name):
+		"""Bound to the subclass so newer erpnext (that would call via
+		doc.<method>) resolves to us. Argument mirrors the module fn."""
+		return _apply_import_from_bom(bom_name)
 
 	def create_bom(self, row, production_item_wise_rm):
 		"""Phase 3: honour output_mode + per-row set_as_default / is_active.
@@ -327,3 +402,13 @@ def add_sub_assembly(**kwargs):
 	kwargs = _coerce_kwargs(kwargs)
 	doc = frappe.get_doc("BOM Creator", kwargs.parent)
 	return _apply_add_sub_assembly(doc, kwargs)
+
+
+@frappe.whitelist()
+def import_from_bom(bom_name):
+	"""Module-level entry point — the client button on older erpnext
+	calls this at the full dotted path, redirected via
+	override_whitelisted_methods to point here on erpnext where the
+	upstream method doesn't yet exist.
+	"""
+	return _apply_import_from_bom(bom_name)

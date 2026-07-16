@@ -6,6 +6,45 @@
 
 frappe.ui.form.on("BOM Creator", {
 	refresh(frm) {
+		// Phase 4B: "Import from BOM" button on brand-new forms. Runs on
+		// every refresh (not gated by the one-shot patched flag below),
+		// because add_custom_button doesn't persist across refreshes.
+		if (frm.is_new()) {
+			frm.add_custom_button(__("Import from BOM"), () => {
+				const dialog = new frappe.ui.Dialog({
+					title: __("Import from an existing BOM"),
+					fields: [
+						{
+							label: __("BOM"),
+							fieldname: "bom_name",
+							fieldtype: "Link",
+							options: "BOM",
+							reqd: 1,
+							get_query() {
+								return { filters: { docstatus: 1 } };
+							},
+						},
+					],
+				});
+				dialog.set_primary_action(__("Import"), () => {
+					const data = dialog.get_values();
+					frappe.call({
+						method: "erpnext.manufacturing.doctype.bom_creator.bom_creator.import_from_bom",
+						args: { bom_name: data.bom_name },
+						freeze: true,
+						freeze_message: __("Reconstructing BOM Creator tree..."),
+						callback(r) {
+							if (r.message) {
+								dialog.hide();
+								frappe.set_route("Form", "BOM Creator", r.message);
+							}
+						},
+					});
+				});
+				dialog.show();
+			});
+		}
+
 		if (window._nbc_bom_creator_patched) return;
 		if (typeof BOMConfigurator === "undefined") return;
 		window._nbc_bom_creator_patched = true;
