@@ -59,6 +59,7 @@ class TestIdentityOverrideNoBehaviouralChange(FrappeTestCase):
 		Phase 2: add_item, add_sub_assembly (UOM & conversion factor fix)
 		Phase 3: create_bom, get_supersede_preview (draft output + default control)
 		Phase 4B: import_from_bom (reconstruct tree from existing BOM)
+		Phase 5: get_default_bom_items (auto-populate RM from default BOM)
 		"""
 		self.assertTrue(issubclass(OverrideBOMCreator, CoreBOMCreator))
 		override_public_names = {
@@ -70,6 +71,7 @@ class TestIdentityOverrideNoBehaviouralChange(FrappeTestCase):
 			"create_bom",
 			"get_supersede_preview",
 			"import_from_bom",
+			"get_default_bom_items",
 		}
 		self.assertEqual(
 			override_public_names,

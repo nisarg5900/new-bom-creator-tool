@@ -27,6 +27,9 @@ override_whitelisted_methods = {
 	# upstream erpnext version this app targets).
 	"erpnext.manufacturing.doctype.bom_creator.bom_creator.import_from_bom":
 		"new_bom_creator.overrides.bom_creator.import_from_bom",
+	# Phase 5: get_default_bom_items (same rationale).
+	"erpnext.manufacturing.doctype.bom_creator.bom_creator.get_default_bom_items":
+		"new_bom_creator.overrides.bom_creator.get_default_bom_items",
 }
 
 # Phase 2: patch BOMConfigurator on the client for a per-line UOM column
@@ -67,6 +70,7 @@ fixtures = [
 					"nbc_output_control_section",
 					"nbc_output_column_break",
 					"imported_from_bom",  # Phase 4B
+					"linked_bom",  # Phase 5
 				],
 			],
 		],

@@ -114,7 +114,9 @@ frappe.ui.form.on("BOM Creator", {
 
 		// --- Patch get_sub_assembly_modal_fields ------------------------------
 		// Wraps the core method to inject a UOM column into the Raw Materials
-		// grid, and extends the item_code change() to prefill UOM = stock_uom.
+		// grid, extends item_code change() to prefill UOM, and (Phase 5) adds
+		// a top-level Sub Assembly Item change() that auto-populates the grid
+		// from the item's default BOM plus a Link BOM as-is checkbox.
 		const orig_gsmf = BOMConfigurator.prototype.get_sub_assembly_modal_fields;
 		BOMConfigurator.prototype.get_sub_assembly_modal_fields = function (...args) {
 			const fields = orig_gsmf.apply(this, args);
@@ -142,6 +144,60 @@ frappe.ui.form.on("BOM Creator", {
 						}
 					};
 				}
+			}
+
+			// Phase 5: top-level Sub Assembly Item auto-populate + link_only.
+			const sub_item_field = fields.find(
+				(f) => f.fieldname === "item_code" && f.fieldtype === "Link" && f.options === "Item"
+			);
+			if (sub_item_field && !sub_item_field._nbc_patched) {
+				sub_item_field._nbc_patched = true;
+				const orig_change = sub_item_field.change;
+				sub_item_field.change = function () {
+					if (orig_change) orig_change.call(this);
+					const item_code = this.value;
+					const dialog = this.layout && this.layout.dialog;
+					if (!item_code || !dialog) return;
+					frappe.call({
+						method:
+							"erpnext.manufacturing.doctype.bom_creator.bom_creator.get_default_bom_items",
+						args: { item_code },
+						callback(r) {
+							if (!r.message) return;
+							const info = r.message;
+							const grid = dialog.fields_dict.items.grid;
+							if (grid.data && grid.data.some((row) => row.item_code)) return;
+							grid.df.data = info.items.map((it) => ({
+								item_code: it.item_code,
+								qty: it.qty,
+								uom: it.uom,
+								conversion_factor: it.conversion_factor,
+								stock_qty: it.stock_qty,
+								operation: it.operation,
+							}));
+							grid.refresh();
+							const link_only_df = dialog.fields_dict.link_only;
+							if (link_only_df) {
+								dialog.set_df_property(
+									"link_only",
+									"description",
+									__("Reuse {0} as-is (linked). Raw materials above are for reference.", [
+										info.default_bom,
+									])
+								);
+							}
+						},
+					});
+				};
+			}
+			if (!fields.some((f) => f.fieldname === "link_only")) {
+				fields.push({
+					fieldname: "link_only",
+					label: __("Link BOM as-is (reuse; don't generate new)"),
+					fieldtype: "Check",
+					default: 0,
+					description: __("Requires the item to have a Default BOM."),
+				});
 			}
 			return fields;
 		};

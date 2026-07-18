@@ -94,6 +94,17 @@ def _apply_add_sub_assembly(doc, kwargs):
 	name = kwargs.fg_reference_id
 	parent_row_no = ""
 
+	# Phase 5: link-only sub-assemblies reuse the item's default BOM.
+	link_only = sbool(bom_item.get("link_only"))
+	linked_bom = None
+	if link_only:
+		linked_bom = frappe.db.get_value("Item", bom_item.item_code, "default_bom")
+		if not linked_bom:
+			frappe.throw(
+				_("Item {0} has no Default BOM to link.").format(bold(bom_item.item_code)),
+				title=_("No Default BOM"),
+			)
+
 	if not kwargs.convert_to_sub_assembly:
 		item_info = get_item_details(bom_item.item_code)
 		parent_row_no = get_parent_row_no(doc, kwargs.fg_reference_id)
@@ -119,6 +130,7 @@ def _apply_add_sub_assembly(doc, kwargs):
 				"stock_uom": item_info.stock_uom,
 				"operation": bom_item.operation,
 				"is_phantom_item": sbool(kwargs.phantom),
+				"linked_bom": linked_bom,
 			},
 		)
 
@@ -130,27 +142,30 @@ def _apply_add_sub_assembly(doc, kwargs):
 			parent_row.is_phantom_item = 1
 		parent_row_no = get_parent_row_no(doc, kwargs.fg_reference_id)
 
-	for row in bom_item.get("items") or []:
-		row = frappe._dict(row)
-		item_info = get_item_details(row.item_code)
-		resolved_uom, cf = _resolve_line_uom(row.item_code, row.get("uom"), item_info.stock_uom)
-		qty = flt(row.qty)
-		doc.append(
-			"items",
-			{
-				"item_code": row.item_code,
-				"qty": qty,
-				"operation": row.operation,
-				"fg_item": bom_item.item_code,
-				"uom": resolved_uom,
-				"fg_reference_id": name,
-				"parent_row_no": parent_row_no,
-				"conversion_factor": cf,
-				"do_not_explode": 1,
-				"stock_qty": qty * cf,
-				"stock_uom": item_info.stock_uom,
-			},
-		)
+	# Linked sub-assemblies don't get raw material rows — the linked BOM
+	# is the source of truth for downstream.
+	if not link_only:
+		for row in bom_item.get("items") or []:
+			row = frappe._dict(row)
+			item_info = get_item_details(row.item_code)
+			resolved_uom, cf = _resolve_line_uom(row.item_code, row.get("uom"), item_info.stock_uom)
+			qty = flt(row.qty)
+			doc.append(
+				"items",
+				{
+					"item_code": row.item_code,
+					"qty": qty,
+					"operation": row.operation,
+					"fg_item": bom_item.item_code,
+					"uom": resolved_uom,
+					"fg_reference_id": name,
+					"parent_row_no": parent_row_no,
+					"conversion_factor": cf,
+					"do_not_explode": 1,
+					"stock_qty": qty * cf,
+					"stock_uom": item_info.stock_uom,
+				},
+			)
 
 	doc.save()
 	return doc
@@ -307,6 +322,11 @@ class BOMCreator(_CoreBOMCreator):
 		doc.<method>) resolves to us. Argument mirrors the module fn."""
 		return _apply_import_from_bom(bom_name)
 
+	@frappe.whitelist()
+	def get_default_bom_items(self, item_code):
+		"""Phase 5: Add Sub Assembly dialog pre-fills from item's default BOM."""
+		return _fetch_default_bom_items(item_code)
+
 	def create_bom(self, row, production_item_wise_rm):
 		"""Phase 3: honour output_mode + per-row set_as_default / is_active.
 
@@ -321,6 +341,13 @@ class BOMCreator(_CoreBOMCreator):
 			BOM_FIELDS,
 			BOM_ITEM_FIELDS,
 		)
+
+		# Phase 5: linked sub-assemblies (row.linked_bom set) reuse an
+		# existing submitted BOM instead of generating a new one. Skip.
+		# The parent BOM's item line consumes item.linked_bom directly
+		# in the inner loop below.
+		if row is not self and row.get("linked_bom"):
+			return
 
 		bom_creator_item = row.name if row.name != self.name else ""
 		if frappe.db.exists(
@@ -363,7 +390,13 @@ class BOMCreator(_CoreBOMCreator):
 		for item in production_item_wise_rm[(row.item_code, row.name)]["items"]:
 			bom_no = ""
 			item.do_not_explode = 1
-			if (item.item_code, item.name) in production_item_wise_rm:
+			# Phase 5: honour a pre-linked BOM (from #38438). If set, the
+			# parent BOM's item line points at the linked BOM and no child
+			# is generated for this branch.
+			if item.get("linked_bom"):
+				bom_no = item.linked_bom
+				item.do_not_explode = 0
+			elif (item.item_code, item.name) in production_item_wise_rm:
 				bom_no = production_item_wise_rm.get((item.item_code, item.name)).bom_no
 				item.do_not_explode = 0
 
@@ -412,3 +445,37 @@ def import_from_bom(bom_name):
 	upstream method doesn't yet exist.
 	"""
 	return _apply_import_from_bom(bom_name)
+
+
+@frappe.whitelist()
+def get_default_bom_items(item_code):
+	"""Module-level entry point for the Phase 5 auto-populate helper."""
+	return _fetch_default_bom_items(item_code)
+
+
+def _fetch_default_bom_items(item_code):
+	"""Shared logic — see fork branch nbc/5-sub-assembly-reuse for the
+	same helper on the class module.
+	"""
+	if not item_code:
+		return None
+	default_bom = frappe.db.get_value("Item", item_code, "default_bom")
+	if not default_bom:
+		return None
+	items = frappe.get_all(
+		"BOM Item",
+		filters={"parent": default_bom, "parenttype": "BOM"},
+		fields=[
+			"item_code",
+			"qty",
+			"uom",
+			"stock_uom",
+			"conversion_factor",
+			"stock_qty",
+			"rate",
+			"operation",
+			"bom_no",
+		],
+		order_by="idx",
+	)
+	return {"default_bom": default_bom, "items": items}
