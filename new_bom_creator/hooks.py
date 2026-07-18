@@ -34,8 +34,15 @@ override_whitelisted_methods = {
 
 # Phase 2: patch BOMConfigurator on the client for a per-line UOM column
 # (absent in older erpnext; no-op if upstream has already added it).
+# Phase 6: BOM form "Switch to BOM Creator" button on new forms.
 doctype_js = {
 	"BOM Creator": "public/js/bom_creator_patches.js",
+	"BOM": "public/js/bom_form.js",
+}
+
+# Phase 6: BOM list view "Create via BOM Creator" action.
+doctype_list_js = {
+	"BOM": "public/js/bom_list.js",
 }
 
 # ---------------------------------------------------------------------------
@@ -153,7 +160,7 @@ fixtures = [
 # ------------
 
 # before_install = "new_bom_creator.install.before_install"
-# after_install = "new_bom_creator.install.after_install"
+after_install = "new_bom_creator.install.after_install"
 
 # Uninstallation
 # ------------
