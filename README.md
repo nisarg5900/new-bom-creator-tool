@@ -1,101 +1,107 @@
 # New BOM Creator Tool
 
 An improved BOM Creator for ERPNext — closing the gaps in the built-in
-*Multi-level BOM Creator* tool while keeping the generated BOMs 100% standard.
+*Multi-level BOM Creator* while keeping the generated BOMs 100% standard.
 
-> Verified against **ERPNext 16.21.1**. License: **GPLv3** (matches ERPNext).
+> **ERPNext v16** (verified against 16.21.1+). License: **GPLv3**.
 
----
+## What it does
 
-## Design target: mergeable **and** standalone
+The app enhances the existing `BOM Creator` doctype via Frappe hooks — no
+parallel doctype, no data-model changes. Every generated BOM is a standard
+`BOM` document that works with Work Orders, MRP, subcontracting, and
+everything else in ERPNext.
 
-The app is built as a stack of small, focused changes to the **existing**
-`BOM Creator` — not as a parallel replacement doctype. Every change is designed
-so it can be shipped two ways:
+### Features
 
-1. **Standalone app** — installed on any ERPNext v16 site; overrides the
-   built-in BOM Creator via Frappe hooks (`override_doctype_class`,
-   `override_whitelisted_methods`, `doctype_js`, bundle override). No fork.
-2. **Upstream PR against `frappe/erpnext`** — each hooks-override maps ~1:1
-   onto an edit of the corresponding core file.
+| Area | What changes |
+|------|-------------|
+| **UOM & conversion** | Per-line UOM selection with strict item-specific conversion factors. No more silent `cf=1` for unmapped UOMs. |
+| **Draft / default control** | Choose Draft or Submitted output. Opt in/out of setting the generated BOM as default. Active/inactive flag. Supersede-preview dialog warns before replacing existing defaults. |
+| **Import from BOM** | Reconstruct a BOM Creator tree from any existing submitted BOM for editing. |
+| **Sub-assembly reuse** | Auto-populate raw materials from an item's default BOM. Link an existing BOM as-is instead of generating a new one. |
+| **Navigation** | "Create via BOM Creator" button on BOM list. "Switch to BOM Creator" on new BOM forms. Workspace shortcut in Manufacturing. |
+| **Tree legibility** | Colour-coded level badges (L0–L4+). Left-border depth indicator. Expand-to-level bar (1–5, All). |
+| **Layer 2 fields** | Warehouses, inspection, backflush, operations (transfer_material_against, fg_based_operating_cost), process loss, per-item source warehouse / alternative item / include-in-manufacturing — all carried through to the generated BOM. |
+| **Labour charges** | Quick-add toolbar button for service items (non-stock, piece-rate labour). |
+| **Dead-field cleanup** | Hides the unused `default_warehouse` field that core never consumes. |
 
-Discipline that keeps both viable:
+### Two-layer workflow
 
-- **One fix = one self-contained unit = one potential PR.** Small focused PRs
-  merge; monolithic rewrites do not. Even if the whole vision isn't accepted,
-  individual wins land.
-- **License GPLv3 from commit 1.** ERPNext is GPLv3; anything else is
-  unmergeable.
-- **ERPNext conventions** (ruff/eslint/prettier, `FrappeTestCase`, no new
-  heavy deps).
-- **Quarantine app-only concerns** (install hooks, workspace card, any
-  branding) in a thin, obviously-droppable layer.
-- **Engage the community first.** Forum post → issues → PRs — do not build
-  first and hope.
+- **Layer 1 — Structure.** FG item, qty, UOM, component tree, sub-assemblies.
+- **Layer 2 — Detail.** Operations, warehouses, quality, process loss,
+  per-item overrides.
 
-## Two-layer workflow
+Structure first, detail second — two passes over the same tree.
 
-Same building surface, two conceptual passes users can iterate on
-independently:
+## Installation
 
-- **Layer 1 — Structure.** FG + qty + UOM; the component tree; sub-assembly vs
-  raw materials; per-line qty & UOM with correct conversion; reuse an
-  existing sub-assembly's default BOM.
-- **Layer 2 — Detail.** Operations/routing, by-products / secondary items,
-  scrap / process loss, QC, warehouses, alternates, active/default control.
+```bash
+# On an existing ERPNext v16 bench
+bench get-app --branch main https://github.com/nisarg5900/new-bom-creator-tool
+bench --site <your-site> install-app new_bom_creator
+```
 
-Structure first, detail second. Layers are two toolbars over the same tree,
-not modal steps.
+The app requires ERPNext (`required_apps = ["erpnext"]`). On install it adds
+a "BOM Creator" shortcut to the Manufacturing workspace.
 
-**Positioning against direct BOM creation:** primary path, not exclusive. The
-standard BOM form stays available for trivial BOMs, quick edits, and platform
-flows (Work Orders, subcontracting, MRP, Data Import). Entry points from the
-BOM list / new-BOM form make the tool the natural default without blocking
-the form.
+## Compatibility
 
-## What's wrong with the built-in BOM Creator
+| Dependency | Version |
+|------------|---------|
+| Frappe     | v16     |
+| ERPNext    | v16 (16.21.1 – 16.26.x+) |
+| Python     | 3.12+   |
 
-Verified against source. Full detail with code references and upstream-issue
-de-duplication in [`docs/UPSTREAM_ISSUES.md`](docs/UPSTREAM_ISSUES.md).
+The app handles both the pre-16.26.2 module-function call path and the
+post-16.26.2 instance-method call path for `add_item` / `add_sub_assembly`.
 
-| # | Gap | Type | Upstream status |
-|---|-----|------|-----------------|
-| 1 | Line UOM / conversion factor hardcoded to stock UOM & factor `1` | Feature | **Not filed** — we draft it |
-| 2 | Output is always submitted; no Draft option | Feature | **Not filed** — we draft it |
-| 3 | Every generated BOM forced to `is_default`, silently superseding existing defaults | Feature | **Not filed** — we draft it |
-| 4 | Sub-assembly RM not fetched from an existing default BOM | Feature | Exists: [#42932](https://github.com/frappe/erpnext/issues/42932) |
-| 5 | Cannot reuse / link an existing BOM as an explodable node | Feature | Exists: [#38438](https://github.com/frappe/erpnext/issues/38438) |
-| 6 | Cannot import an existing submitted BOM back into the tool for editing | Feature | Adjacent: [#38395](https://github.com/frappe/erpnext/issues/38395) |
-| 7 | No entry point from the BOM list / new-BOM form | Feature | **Not filed** — we draft it |
-| 8 | Tree view is cluttered; no level-based grouping/collapse | UX | **Not filed** — we draft it |
-| 9 | Dead fields: client writes to non-existent `bom_no`; header `default_warehouse` never consumed | Bug | **Not filed** — we draft it |
-| — | Operations/routing costing surface missing | Feature | Exists: [#44094](https://github.com/frappe/erpnext/issues/44094), [#40529](https://github.com/frappe/erpnext/issues/40529), [#48154](https://github.com/frappe/erpnext/issues/48154) |
+## How it works
 
-## Engagement plan (sequenced)
+All changes are applied via Frappe's hook system — no core patches required:
 
-1. **Forum post** on `discuss.frappe.io` — [`docs/FORUM_POST.md`](docs/FORUM_POST.md) —
-   list the gaps, ask if others hit them, ask maintainers if PRs would be
-   welcome, invite feature suggestions we haven't listed.
-2. **Per-fix GitHub issues** — [`docs/UPSTREAM_ISSUES.md`](docs/UPSTREAM_ISSUES.md) —
-   filed separately (per ERPNext CONTRIBUTING), each with a *willing to PR* offer.
-3. **Build the standalone app**, phase by phase — [`PHASED_PLAN.md`](PHASED_PLAN.md).
-4. **Open PRs** as each phase completes, smallest first (dead-field bugs →
-   UOM → …).
+- `override_doctype_class` — subclasses `BOMCreator` for `create_bom` and
+  method overrides.
+- `override_whitelisted_methods` — intercepts `add_item`,
+  `add_sub_assembly`, `import_from_bom`, `get_default_bom_items`.
+- `doctype_js` — client-side patches for the BOM Creator tree (UOM column,
+  level badges, labour button, supersede preview) and BOM form (switch
+  button).
+- `doctype_list_js` — BOM list "Create via BOM Creator" action.
+- `fixtures` — Property Setter (hide dead field) + Custom Fields (output
+  control, Layer 2 fields).
+- `after_install` — adds Manufacturing workspace shortcut.
 
-## Environment
+## Upstream fork branches
 
-| Item | Value |
-|------|-------|
-| Frappe / ERPNext | v16 / 16.21.1 |
-| Frappe app module | `new_bom_creator` |
-| Dedicated test site | `bomcreator.localhost` (to be created — see plan) |
-| License | GPLv3 |
+Each feature is also expressed as a focused branch on
+[nisarg5900/erpnext](https://github.com/nisarg5900/erpnext), ready for a
+maintainer to PR into `frappe/erpnext`:
 
-> **Isolation:** one dedicated test site per app; never shared with unrelated
-> apps.
+| Branch | Scope |
+|--------|-------|
+| `nbc/1-dead-fields` | Remove unused `default_warehouse` and dead `bom_no` client write |
+| `nbc/2-uom-conversion` | Per-line UOM with strict conversion |
+| `nbc/3-draft-and-default` | Draft output, is_default/is_active control, supersede preview |
+| `nbc/4-import-from-bom` | Import existing BOM into BOM Creator |
+| `nbc/5-sub-assembly-reuse` | Fetch RM from default BOM + link BOM as-is |
+| `nbc/6-navigation` | Entry points from BOM list/form + workspace shortcut |
+| `nbc/7-tree-legibility` | Level badges, depth borders, expand-to-level |
+| `nbc/8-layer2-fields` | Warehouses, inspection, backflush, per-item fields |
+| `nbc/8-layer2-ops-labour` | Operations, process loss, labour charges |
 
-## Status
+## Tests
 
-Planning. No app code yet — this repo currently holds the phased plan, the
-forum-post draft, and the upstream-issue drafts. Frappe Cloud deployment is
-**out of scope** until explicitly confirmed.
+```bash
+bench --site <your-site> run-tests --app new_bom_creator
+```
+
+56 tests covering: hook wiring, UOM conversion (happy + error paths), draft
+output, default/active control, supersede preview, import-from-BOM, linked
+BOM reuse, navigation hooks, tree level computation, Layer 2 field
+carry-through (header + per-item + fetch_from bypass), operations,
+process loss, labour charges JS, and end-to-end BOM generation integration.
+
+## License
+
+GPLv3 — same as ERPNext.

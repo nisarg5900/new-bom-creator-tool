@@ -101,7 +101,7 @@ form.
 
 ---
 
-## Phase 0 — Fork, scaffold, test site, override plumbing
+## Phase 0 — Fork, scaffold, test site, override plumbing ✅
 
 **Goal:** the fork exists with a working branch template; the standalone
 GPLv3 app is installable and knows how to override the four methods and the
@@ -141,7 +141,7 @@ behaviour unchanged.
 
 ---
 
-## Phase 1 — Bug fixes: dead fields *(smallest possible PR; relationship-builder)*
+## Phase 1 — Bug fixes: dead fields *(smallest possible PR; relationship-builder)* ✅
 
 **Goal:** ship the trivial, high-signal cleanup as our first upstream PR to
 establish a review relationship before we ask for larger changes.
@@ -165,7 +165,7 @@ happens only after the whole build is complete.
 
 ---
 
-## Phase 2 — UOM & conversion factor *(no schema change; smallest feature PR)*
+## Phase 2 — UOM & conversion factor *(no schema change; smallest feature PR)* ✅
 
 **Goal:** the headline pain point. Line UOM independent of stock UOM, with
 correct conversion factor. `uom` / `conversion_factor` / `stock_qty` fields
@@ -196,7 +196,7 @@ line matches.
 
 ---
 
-## Phase 3 — Draft output + is_default / is_active control
+## Phase 3 — Draft output + is_default / is_active control ✅
 
 **Goal:** stop forcing submit-and-default; make destructive actions explicit.
 
@@ -223,7 +223,7 @@ scope; still isolated.
 
 ---
 
-## Phase 4 — Import an existing BOM into BOM Creator for editing
+## Phase 4 — Import an existing BOM into BOM Creator for editing ✅
 
 **Goal:** stop the tool from being one-directional.
 
@@ -248,7 +248,7 @@ and regenerated as a proper new version.
 
 ---
 
-## Phase 5 — Sub-assembly reuse *(coordinates with upstream #42932 / #38438)*
+## Phase 5 — Sub-assembly reuse *(coordinates with upstream #42932 / #38438)* ✅
 
 **Goal:** stop retyping recipes that already exist.
 
@@ -272,7 +272,7 @@ than filing new ones. Comment on those issues linking our PR.
 
 ---
 
-## Phase 6 — Navigation entry points
+## Phase 6 — Navigation entry points ✅
 
 **Goal:** discoverable from where users already are, without editing erpnext.
 
@@ -292,7 +292,7 @@ workspace, all without touching erpnext source.
 
 ---
 
-## Phase 7 — Tree view legibility (Layer 1 UX polish)
+## Phase 7 — Tree view legibility (Layer 1 UX polish) ✅
 
 **Goal:** a legible tree that survives real-world multi-level BOMs.
 
@@ -323,7 +323,7 @@ tree page — do not bundle.
 
 ---
 
-## Phase 8 — Layer 2: operations, warehouses, alternates, by-products
+## Phase 8 — Layer 2: operations, warehouses, alternates, by-products ✅
 *(optional / advanced; ship as its own PR family after Phase 6)*
 
 **Goal:** decorate nodes with the details currently unreachable through the
@@ -366,7 +366,7 @@ less contentious first).
 
 ---
 
-## Phase 9 — Packaging, docs, release
+## Phase 9 — Packaging, docs, release ✅
 
 - README screenshots (before/after tree, UOM entry, supersede preview).
 - User guide + versioned release notes.
