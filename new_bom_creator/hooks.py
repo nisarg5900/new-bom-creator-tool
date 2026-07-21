@@ -89,6 +89,12 @@ fixtures = [
 					"source_warehouse",
 					"allow_alternative_item",
 					"include_item_in_manufacturing",
+					# Phase 8 sub-scopes 1, 6: operations + process loss
+					"nbc_operations_section",
+					"transfer_material_against",
+					"fg_based_operating_cost",
+					"nbc_process_loss_section",
+					"process_loss_percentage",
 				],
 			],
 		],

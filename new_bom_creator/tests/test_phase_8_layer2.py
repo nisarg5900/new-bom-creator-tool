@@ -1,16 +1,19 @@
 """Phase 8 tests — Layer 2 field pass-throughs.
 
-Covers sub-scopes 2-5:
-  - Header-level fields (default warehouses, inspection, backflush) carry
-    through from BOM Creator to the generated BOM.
+Covers sub-scopes 1-7:
+  - Header-level fields (default warehouses, inspection, backflush,
+    transfer_material_against, fg_based_operating_cost,
+    process_loss_percentage) carry through from BOM Creator to the
+    generated BOM.
   - Per-line fields (source_warehouse, allow_alternative_item,
     include_item_in_manufacturing) carry through to the BOM Item lines.
   - Custom field fixtures are registered.
+  - Labour charges helper JS is present.
 """
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 from new_bom_creator.overrides.bom_creator import _apply_add_item
 from new_bom_creator.tests.utils import (
@@ -35,6 +38,9 @@ class TestPhase8Fixtures(FrappeTestCase):
 			"inspection_required",
 			"quality_inspection_template",
 			"backflush_based_on",
+			"transfer_material_against",
+			"fg_based_operating_cost",
+			"process_loss_percentage",
 		):
 			self.assertIsNotNone(
 				meta.get_field(fname),
@@ -219,3 +225,105 @@ class TestLayer2FieldPassThrough(FrappeTestCase):
 		self.assertEqual(len(bom_items), 1)
 		self.assertEqual(cint(bom_items[0]["allow_alternative_item"]), 1)
 		self.assertEqual(cint(bom_items[0]["include_item_in_manufacturing"]), 1)
+
+	def test_process_loss_carry_through(self):
+		doc = new_bom_creator(
+			item_code="NBC-POLY",
+			qty=1,
+			output_mode="Draft",
+			set_as_default=0,
+		)
+		doc.process_loss_percentage = 5.0
+		doc.insert(ignore_permissions=True)
+		self.bc_name = doc.name
+
+		_apply_add_item(
+			doc,
+			frappe._dict(
+				{
+					"parent": doc.name,
+					"fg_item": "NBC-POLY",
+					"item_code": "NBC-STEEL",
+					"fg_reference_id": doc.name,
+					"qty": 1,
+				}
+			),
+		)
+		doc.reload()
+		doc.create_boms()
+
+		generated = frappe.get_all(
+			"BOM",
+			filters={"bom_creator": doc.name},
+			fields=["name"],
+		)
+		self.assertTrue(generated, "No BOM generated")
+		bom = frappe.get_doc("BOM", generated[0]["name"])
+		self.assertAlmostEqual(flt(bom.process_loss_percentage), 5.0, places=2)
+
+	def test_transfer_material_against_carry_through(self):
+		doc = new_bom_creator(
+			item_code="NBC-POLY",
+			qty=1,
+			output_mode="Draft",
+			set_as_default=0,
+		)
+		doc.transfer_material_against = "Job Card"
+		doc.insert(ignore_permissions=True)
+		self.bc_name = doc.name
+
+		_apply_add_item(
+			doc,
+			frappe._dict(
+				{
+					"parent": doc.name,
+					"fg_item": "NBC-POLY",
+					"item_code": "NBC-STEEL",
+					"fg_reference_id": doc.name,
+					"qty": 1,
+					"operation": "",
+				}
+			),
+		)
+		doc.reload()
+
+		# Set an operation on the item to trigger with_operations path
+		steel_row = next(r for r in doc.items if r.item_code == "NBC-STEEL")
+		# Need an Operation doctype record; create one if missing
+		if not frappe.db.exists("Operation", "NBC Test Op"):
+			frappe.get_doc({"doctype": "Operation", "name": "NBC Test Op"}).insert(
+				ignore_permissions=True
+			)
+			frappe.db.commit()
+		steel_row.operation = "NBC Test Op"
+		doc.save(ignore_permissions=True)
+
+		doc.create_boms()
+
+		generated = frappe.get_all(
+			"BOM",
+			filters={"bom_creator": doc.name},
+			fields=["name"],
+		)
+		self.assertTrue(generated)
+		bom = frappe.get_doc("BOM", generated[0]["name"])
+		self.assertEqual(bom.transfer_material_against, "Job Card")
+
+
+class TestLabourChargesJS(FrappeTestCase):
+	"""The JS patch includes the labour charges helper."""
+
+	def test_labour_button_in_js_patch(self):
+		import os
+
+		js_path = os.path.join(
+			os.path.dirname(os.path.dirname(__file__)),
+			"public",
+			"js",
+			"bom_creator_patches.js",
+		)
+		with open(js_path) as f:
+			content = f.read()
+		self.assertIn("_nbc_add_labour", content)
+		self.assertIn("Add Labour Charge", content)
+		self.assertIn("is_stock_item: 0", content)

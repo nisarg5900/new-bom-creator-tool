@@ -408,7 +408,9 @@ class BOMCreator(_CoreBOMCreator):
 			if not self.is_phantom and (self.routing or self.has_operations()):
 				bom.routing = self.routing
 				bom.with_operations = 1
-				bom.transfer_material_against = "Work Order"
+				bom.transfer_material_against = self.get("transfer_material_against") or "Work Order"
+				if self.get("fg_based_operating_cost"):
+					bom.fg_based_operating_cost = 1
 
 		for field in BOM_FIELDS:
 			if self.get(field):
@@ -421,6 +423,7 @@ class BOMCreator(_CoreBOMCreator):
 			"inspection_required",
 			"quality_inspection_template",
 			"backflush_based_on",
+			"process_loss_percentage",
 		):
 			val = self.get(field)
 			if val:

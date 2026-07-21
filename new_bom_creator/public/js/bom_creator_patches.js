@@ -269,10 +269,27 @@ frappe.ui.form.on("BOM Creator", {
 			document.head.appendChild(style);
 		}
 
-		// Wrap tree_methods to augment onrender with level badge + border
+		// Wrap tree_methods: level badges + border, and "+ Labour" toolbar button
 		const _orig_tree_methods = BOMConfigurator.prototype.tree_methods;
 		BOMConfigurator.prototype.tree_methods = function (...args) {
 			const methods = _orig_tree_methods.apply(this, args);
+
+			// Phase 8 sub-scope 7: inject "+ Labour" toolbar button
+			if (Array.isArray(methods.toolbar)) {
+				const bom_configurator = this;
+				methods.toolbar.push({
+					label: __(frappe.utils.icon("add", "sm") + " Labour"),
+					click: function (node) {
+						const view = frappe.views.trees["BOM Configurator"];
+						bom_configurator._nbc_add_labour(node, view);
+					},
+					condition: function (node) {
+						return node.expandable;
+					},
+					btnClass: "hidden-xs",
+				});
+			}
+
 			const orig_onrender = methods.onrender;
 			methods.onrender = function (node) {
 				if (orig_onrender) orig_onrender.call(this, node);
@@ -295,6 +312,78 @@ frappe.ui.form.on("BOM Creator", {
 				}
 			};
 			return methods;
+		};
+
+		// Phase 8 sub-scope 7: "Add Labour Charge" dialog
+		BOMConfigurator.prototype._nbc_add_labour = function (node, view) {
+			const bom_configurator = this;
+			const dialog = new frappe.ui.Dialog({
+				title: __("Add Labour Charge"),
+				fields: [
+					{
+						label: __("Service Item"),
+						fieldname: "item_code",
+						fieldtype: "Link",
+						options: "Item",
+						reqd: 1,
+						get_query() {
+							return { filters: { is_stock_item: 0 } };
+						},
+						change() {
+							const ic = dialog.get_value("item_code");
+							if (ic) {
+								frappe.db.get_value("Item", ic, "stock_uom").then((r) => {
+									const su = r.message && r.message.stock_uom;
+									if (su) dialog.set_value("uom", su);
+								});
+							}
+						},
+					},
+					{
+						label: __("Qty"),
+						fieldname: "qty",
+						fieldtype: "Float",
+						default: 1.0,
+						reqd: 1,
+					},
+					{
+						label: __("Rate"),
+						fieldname: "rate",
+						fieldtype: "Currency",
+						description: __("Piece-rate or per-unit labour cost"),
+					},
+					{
+						label: __("UOM"),
+						fieldname: "uom",
+						fieldtype: "Link",
+						options: "UOM",
+						reqd: 1,
+					},
+				],
+			});
+			dialog.set_primary_action(__("Add"), () => {
+				const data = dialog.get_values();
+				if (!node.data.parent_id) {
+					node.data.parent_id = bom_configurator.frm.doc.name;
+				}
+				frappe.call({
+					method: "erpnext.manufacturing.doctype.bom_creator.bom_creator.add_item",
+					args: {
+						parent: bom_configurator.frm.doc.name,
+						fg_item: node.data.value,
+						item_code: data.item_code,
+						fg_reference_id: node.data.name || bom_configurator.frm.doc.name,
+						qty: data.qty,
+						uom: data.uom,
+						rate: data.rate || 0,
+					},
+					callback: (r) => {
+						view.events.load_tree(r, node);
+					},
+				});
+				dialog.hide();
+			});
+			dialog.show();
 		};
 
 		// Wrap prepare_layout to add the expand-to-level control bar
