@@ -78,6 +78,17 @@ fixtures = [
 					"nbc_output_column_break",
 					"imported_from_bom",  # Phase 4B
 					"linked_bom",  # Phase 5
+					# Phase 8: Layer 2 field pass-throughs
+					"nbc_layer2_section",
+					"nbc_layer2_column_break",
+					"default_source_warehouse",
+					"default_target_warehouse",
+					"inspection_required",
+					"quality_inspection_template",
+					"backflush_based_on",
+					"source_warehouse",
+					"allow_alternative_item",
+					"include_item_in_manufacturing",
 				],
 			],
 		],

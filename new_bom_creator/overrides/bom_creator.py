@@ -414,8 +414,21 @@ class BOMCreator(_CoreBOMCreator):
 			if self.get(field):
 				bom.set(field, self.get(field))
 
+		# Phase 8: carry through header-level Layer 2 fields.
+		for field in (
+			"default_source_warehouse",
+			"default_target_warehouse",
+			"inspection_required",
+			"quality_inspection_template",
+			"backflush_based_on",
+		):
+			val = self.get(field)
+			if val:
+				bom.set(field, val)
+
 		_apply_output_control(self, row, bom)
 
+		_layer2_per_item = []
 		for item in production_item_wise_rm[(row.item_code, row.name)]["items"]:
 			bom_no = ""
 			item.do_not_explode = 1
@@ -436,14 +449,28 @@ class BOMCreator(_CoreBOMCreator):
 			item_args.update(
 				{
 					"bom_no": bom_no,
-					"allow_alternative_item": 1,
-					"include_item_in_manufacturing": 1,
+					"source_warehouse": item.get("source_warehouse") or "",
 				}
 			)
 
 			bom.append("items", item_args)
+			_layer2_per_item.append(
+				{
+					"item_code": item.item_code,
+					"allow_alternative_item": cint(item.get("allow_alternative_item", 1)),
+					"include_item_in_manufacturing": cint(item.get("include_item_in_manufacturing", 1)),
+				}
+			)
 
 		bom.save(ignore_permissions=True)
+
+		for bom_item in bom.items:
+			overrides = next(
+				(o for o in _layer2_per_item if o["item_code"] == bom_item.item_code), None
+			)
+			if overrides:
+				bom_item.db_set("allow_alternative_item", overrides["allow_alternative_item"])
+				bom_item.db_set("include_item_in_manufacturing", overrides["include_item_in_manufacturing"])
 		if _should_submit(self):
 			bom.submit()
 
