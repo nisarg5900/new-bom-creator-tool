@@ -297,6 +297,35 @@ def _import_walk_bom(bc, bom, parent_row_no, visited):
 			_import_walk_bom(bc, child_bom, parent_row_no=new_idx, visited=visited | {item.bom_no})
 
 
+def _compute_levels(items):
+	"""Return {row.name: depth} for every BOM Creator Item row.
+
+	Root (is_root=1) is level 0. Children are level 1, grandchildren 2, etc.
+	Uses fg_reference_id as the parent pointer.
+	"""
+	children_of = {}
+	for item in items:
+		ref = item.get("fg_reference_id") or ""
+		children_of.setdefault(ref, []).append(item)
+
+	levels = {}
+	queue = []
+	for item in items:
+		if cint(item.get("is_root")):
+			levels[item.name] = 0
+			queue.append(item.name)
+			break
+
+	while queue:
+		parent_name = queue.pop(0)
+		parent_level = levels[parent_name]
+		for child in children_of.get(parent_name, []):
+			levels[child.name] = parent_level + 1
+			queue.append(child.name)
+
+	return levels
+
+
 class BOMCreator(_CoreBOMCreator):
 	"""Subclass override — fires on erpnext 16.26.2+ where the frontend
 	calls `add_item` / `add_sub_assembly` as instance methods on the doc.
